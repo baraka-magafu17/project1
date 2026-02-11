@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login - My Platform</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: linear-gradient(135deg,#007bff,#6610f2); height:100vh; display:flex; justify-content:center; align-items:center; margin:0; }
+    .box { background:white; padding:30px; border-radius:10px; width:320px; box-shadow:0 4px 10px rgba(0,0,0,0.2); }
+    h2 { text-align:center; color:#333; }
+    input { width:100%; padding:10px; margin:8px 0; border-radius:6px; border:1px solid #ccc; }
+    button { width:100%; padding:10px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; }
+    button:hover { background:#0056b3; }
+    .notify { position:fixed; top:20px; right:20px; background:#28a745; color:white; padding:10px 15px; border-radius:6px; display:none; }
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h2>Login</h2>
+  <form id="loginForm">
+    <input type="email" name="email" placeholder="Email" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <button type="submit">Login</button>
+  </form>
+  <p style="text-align:center;margin-top:10px;">Don’t have an account? <a href="register.html">Register</a></p>
+</div>
+
+<div class="notify" id="notify"></div>
+
+<script>
+function show(msg, type="success"){
+  const n = document.getElementById('notify');
+  n.textContent = msg;
+  n.style.display = 'block';
+  n.style.background = type==="error" ? "#dc3545" : "#28a745";
+  setTimeout(()=> n.style.display="none", 3000);
+}
+
+document.getElementById('loginForm').onsubmit = async (e)=>{
+  e.preventDefault();
+  const data = new FormData(e.target);
+  const res = await fetch('login.php',{method:'POST', body:data});
+  const result = await res.json();
+  if(result.success){
+    show('Login successful!');
+    setTimeout(()=> window.location='dashboard.html', 1000);
+  } else show('Invalid credentials', 'error');
+}
+</script>
+</body>
+</html>

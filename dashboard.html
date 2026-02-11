@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Platform Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f4f4; margin:0; padding:20px; }
+    h2 { color:#333; }
+    .container { display:flex; gap:20px; }
+    .sidebar, .content { background:white; padding:15px; border-radius:10px; box-shadow:0 0 5px rgba(0,0,0,0.1); }
+    .sidebar { width:30%; }
+    .content { flex:1; }
+    ul { list-style:none; padding:0; }
+    li { padding:5px 0; cursor:pointer; border-bottom:1px solid #eee; }
+    li:hover { background:#f0f0f0; }
+    textarea { width:100%; height:60px; }
+    input[type="file"] { margin-top:5px; }
+    button { padding:6px 10px; margin-top:5px; cursor:pointer; background:#007bff; color:white; border:none; border-radius:5px; }
+    button:hover { background:#0056b3; }
+    input, textarea { padding:5px; border-radius:5px; border:1px solid #ccc; }
+    #files li a { color:blue; text-decoration:none; }
+
+    .form-box { margin-bottom:15px; background:#f9f9f9; padding:10px; border-radius:8px; border:1px solid #ddd; }
+    .form-box input, .form-box textarea { width:100%; margin-top:5px; }
+
+    /* 🔔 Notification styles */
+    #notify { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+    .note { padding: 10px 15px; margin-top: 10px; border-radius: 6px; color: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      animation: fadein 0.3s, fadeout 0.3s ease-out forwards; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(-10px);} to { opacity: 1; transform: translateY(0);} }
+    @keyframes fadeout { to { opacity: 0; transform: translateX(100%);} }
+    .success { background-color: #28a745; }
+    .error { background-color: #dc3545; }
+    .info { background-color: #17a2b8; }
+  </style>
+</head>
+<body>
+  <h2>Welcome to My Platform Dashboard</h2>
+  <button onclick="logout()">Logout</button>
+  <hr>
+
+  <!-- Notification container -->
+  <div id="notify"></div>
+
+  <div class="container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <h3>Your Groups</h3>
+
+      <!-- Create Group Form -->
+      <form id="createGroupForm" class="form-box">
+        <h4>Create New Group</h4>
+        <input type="text" id="groupName" placeholder="Group Name" required><br>
+        <textarea id="groupDesc" placeholder="Group Description (optional)"></textarea><br>
+        <button type="submit">Create Group</button>
+      </form>
+
+      <!-- Join Group Form -->
+      <form id="joinGroupForm" class="form-box">
+        <h4>Join Existing Group</h4>
+        <input type="number" id="joinGroupId" placeholder="Enter Group ID" required><br>
+        <button type="submit">Join Group</button>
+      </form>
+
+      <ul id="groups"></ul>
+    </div>
+
+    <!-- Main content -->
+    <div class="content">
+      <h3 id="groupTitle">Select a group to view</h3>
+      <div id="groupSection" style="display:none;">
+
+        <h4>Messages</h4>
+        <div id="messages" style="background:#fafafa;border:1px solid #ddd;padding:10px;height:200px;overflow-y:scroll;"></div>
+
+        <textarea id="msgInput" placeholder="Type message..."></textarea><br>
+        <button onclick="sendMessage()">Send</button>
+
+        <h4>Files</h4>
+        <ul id="files"></ul>
+
+        <form id="uploadForm" enctype="multipart/form-data">
+          <input type="file" name="file" required>
+          <button type="submit">Upload</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentGroup = null;
+
+    // ✅ Notification popup
+    function notify(msg, type='info', timeout=3000){
+      const div=document.createElement('div');
+      div.className='note '+type;
+      div.textContent=msg;
+      document.getElementById('notify').appendChild(div);
+      setTimeout(()=>{div.style.animation='fadeout 0.5s forwards'; setTimeout(()=>div.remove(),500)}, timeout);
+    }
+
+    // ✅ Load groups
+    async function loadGroups(){
+      const res = await fetch('fetch_groups.php');
+      const data = await res.json();
+      const list = document.getElementById('groups');
+      list.innerHTML = '';
+      if(data.success){
+        if(data.groups.length === 0){
+          const none = document.createElement('li');
+          none.textContent = "No groups yet.";
+          list.appendChild(none);
+        } else {
+          data.groups.forEach(g=>{
+            const li=document.createElement('li');
+            li.textContent=g.name+' ('+g.member_count+' members) [ID:'+g.group_id+']';
+            li.onclick=()=>selectGroup(g.group_id,g.name);
+            list.appendChild(li);
+          });
+        }
+      } else {
+        notify('Please login again','error');
+        window.location='login.html';
+      }
+    }
+
+    // ✅ Select a group
+    async function selectGroup(id, name){
+      currentGroup=id;
+      document.getElementById('groupSection').style.display='block';
+      document.getElementById('groupTitle').textContent=name;
+      loadMessages();
+      loadFiles();
+      notify('Opened group: '+name,'info');
+    }
+
+    // ✅ Load messages
+    async function loadMessages(){
+      const res=await fetch(`fetch_messages.php?group_id=${currentGroup}`);
+      const data=await res.json();
+      const div=document.getElementById('messages');
+      div.innerHTML='';
+      if(data.success){
+        data.messages.forEach(m=>{
+          const p=document.createElement('p');
+          p.textContent=`[${m.sender_name||'Unknown'}] ${m.content}`;
+          div.appendChild(p);
+        });
+        div.scrollTop=div.scrollHeight;
+      }
+    }
+
+    // ✅ Send message
+    async function sendMessage(){
+      const msg=document.getElementById('msgInput').value.trim();
+      if(!msg) return notify('Type a message first','error');
+      const f=new FormData();
+      f.append('group_id',currentGroup);
+      f.append('content',msg);
+      const res=await fetch('send_message.php',{method:'POST',body:f});
+      const data=await res.json();
+      if(data.success){
+        document.getElementById('msgInput').value='';
+        loadMessages();
+        notify('Message sent!','success');
+      } else notify('Failed to send','error');
+    }
+
+    // ✅ Load files
+    async function loadFiles(){
+      const res=await fetch(`fetch_files.php?group_id=${currentGroup}`);
+      const data=await res.json();
+      const list=document.getElementById('files');
+      list.innerHTML='';
+      if(data.success){
+        data.files.forEach(f=>{
+          const li=document.createElement('li');
+          const a=document.createElement('a');
+          a.href=`download_file.php?file_id=${f.file_id}`;
+          a.textContent=f.original_name+` (${(f.file_size/1024).toFixed(1)} KB)`;
+          li.appendChild(a);
+          list.appendChild(li);
+        });
+      }
+    }
+
+    // ✅ Upload file
+    const uploadForm=document.getElementById('uploadForm');
+    uploadForm.onsubmit=async(e)=>{
+      e.preventDefault();
+      if(!currentGroup) return notify('Select a group first','error');
+      const f=new FormData(uploadForm);
+      f.append('group_id',currentGroup);
+      const res=await fetch('upload_file.php',{method:'POST',body:f});
+      const data=await res.json();
+      if(data.success){
+        uploadForm.reset();
+        loadFiles();
+        notify('File uploaded!','success');
+      } else notify('Upload failed','error');
+    }
+
+    // ✅ Create group
+    const createGroupForm=document.getElementById('createGroupForm');
+    createGroupForm.onsubmit=async(e)=>{
+      e.preventDefault();
+      const name=document.getElementById('groupName').value.trim();
+      const desc=document.getElementById('groupDesc').value.trim();
+      if(!name) return notify('Please enter a group name','error');
+      const f=new FormData();
+      f.append('name',name);
+      f.append('description',desc);
+      const res=await fetch('create_group.php',{method:'POST',body:f});
+      const data=await res.json();
+      if(data.success){
+        notify('Group created successfully!','success');
+        document.getElementById('groupName').value='';
+        document.getElementById('groupDesc').value='';
+        loadGroups(); // refresh list
+      } else notify('Failed: '+(data.error||'Unknown error'),'error');
+    }
+
+    // ✅ Join group
+    const joinGroupForm=document.getElementById('joinGroupForm');
+    joinGroupForm.onsubmit=async(e)=>{
+      e.preventDefault();
+      const id=document.getElementById('joinGroupId').value.trim();
+      if(!id) return notify('Enter a group ID','error');
+      const f=new FormData();
+      f.append('group_id',id);
+      const res=await fetch('join_group.php',{method:'POST',body:f});
+      const data=await res.json();
+      if(data.success){
+        document.getElementById('joinGroupId').value='';
+        notify('Joined group successfully!','success');
+        loadGroups();
+      } else notify('Failed to join','error');
+    }
+
+    // ✅ Logout (fixed)
+    async function logout(){
+      try{
+        const res=await fetch('logout.php');
+        const data=await res.json();
+        if(data.success){
+          notify('Logged out successfully','info');
+          setTimeout(()=>window.location='login.html',1000);
+        }
+      }catch(e){notify('Logout failed','error');}
+    }
+
+    // Load groups on start
+    loadGroups();
+  </script>
+</body>
+</html>
